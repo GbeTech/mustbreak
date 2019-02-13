@@ -1,67 +1,57 @@
 import asyncio
-import subprocess
 import sys
+import time
+import subprocess
+from optparse import OptionParser
+
+parser = OptionParser()
+parser.add_option('--no_interrupt', action='store_true', default=False)
+parser.add_option('--lock_mins', type=int, default=10)
+START = int(time.time())
+options, args = parser.parse_args()
+MINS = int(args[0])
+print(f'MINS: {MINS}, no_interrupt: {options.no_interrupt}, lock_mins: {options.lock_mins}')
 
 
-def get_localtime_str():
-    localtime = time.localtime()
-    return f'{localtime.tm_hour}:{localtime.tm_min}:{localtime.tm_sec}'
-
-
-async def sleep_secs(secs):
-    print(f'sleep_secs({secs})')
-    for i in range(secs):
-        if i % 5 == 0:
-            print(f'breaking in {secs - i} seconds')
-        await asyncio.sleep(1)
-
-
-async def sleep_mins(mins):
-    print(f'sleep_mins({mins})')
-    for i in range(mins * 60):
-        if i % 5 == 0:
-            secs_left = mins * 60 - i % 60
-            mins_left = int(secs_left / 60)
-            print(f'breaking in {mins_left}m {secs_left - mins_left * 60}s')
-        await asyncio.sleep(1)
-
-
-def run(mins):
-    loop = asyncio.get_event_loop()
-    started_at = time.time()
+def lock():
     try:
-        loop.run_until_complete(sleep_mins(mins))
-    except KeyboardInterrupt:
-        if disallow_interrupt:
-            exception_at = time.time()
-            secs_left = int(mins) * 60 - (started_at - exception_at)
-            mins_left = int(secs_left / 60)
-            print(f'\ndisallow_interrupt! {mins_left} mins left\n')
-            loop.run_until_complete(sleep_mins(mins_left))
-        else:
-            print('KeyboardInterrupt, exiting')
-            sys.exit()
-    print('Done waiting')
-
-    try:
-        localtime = get_localtime_str()
-        print(f'running exe, {localtime}')
-        # p = subprocess.run(r'c:\Sync\Scripts\lock_modifiers.exe', timeout=10 * 60)
-        # loop.run_until_complete(sleep_mins(10))
-        p = subprocess.run(r'c:\Sync\Scripts\lock_modifiers.exe', timeout=5)
-        loop.run_until_complete(sleep_secs(5))
+        subprocess.run(r'c:\Sync\Scripts\lock_modifiers.exe', timeout=int(options.lock_mins) * 60)
     except subprocess.TimeoutExpired:
-        localtime = get_localtime_str()
-        print(f'exe disabled {localtime}')
+        return True
 
 
-if __name__ == '__main__':
-    import time
+async def wait(required_secs):
+    print(f'wait(required_secs={required_secs})')
 
-    mins = sys.argv[1]
+    for i in range(required_secs):
+        if i % 5 == 0:
+            secs_left = required_secs - i
+            mins_left = int(secs_left / 60)
+            print(f'Locking in:  {mins_left}m {secs_left - mins_left * 60}s')
+        await asyncio.sleep(1)
+
+
+def run(secs):
+    print(f'\nrun(secs={secs})')
     try:
-        disallow_interrupt = sys.argv[2]
-    except:
-        disallow_interrupt = False
-    print(f'mins: {mins}, disallow_interrupt: {disallow_interrupt}')
-    run(int(mins))
+        asyncio.run(wait(secs))
+        print(f'Done asyncio.run(wait({secs})). Calling lock().')
+        lock()
+        print(f'Done locking.')
+    except KeyboardInterrupt:
+        if options.no_interrupt:
+            exception_at = int(time.time())
+            secs_left = START + MINS - exception_at
+            print(f'''\nNO_INTERRUPT! 
+    exception_at: {exception_at}
+    secs_left: {secs_left}s
+    Calling run({secs_left})''')
+
+            run(secs_left)
+
+        else:
+            print(f'KeyboardInterrupt, exiting.')
+            sys.exit()
+
+
+run(MINS * 60)
