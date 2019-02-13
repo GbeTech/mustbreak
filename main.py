@@ -30,7 +30,6 @@ def run(mins):
     loop = asyncio.get_event_loop()
     started_at = time.time()
     try:
-        task = asyncio.create_task(sleep_mins(mins))
         loop.run_until_complete(sleep_mins(mins))
     except KeyboardInterrupt:
         if disallow_interrupt:
